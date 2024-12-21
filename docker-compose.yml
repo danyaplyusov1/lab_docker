@@ -1,0 +1,62 @@
+services:
+  postgres:
+    build:
+      context: services/postgresql
+      dockerfile: db.dockerfile
+    restart: 'unless-stopped'
+    environment:
+      POSTGRES_PASSWORD: postgres
+      APP_POSTGRES_USERNAME: '${APP_POSTGRES_USERNAME:-stud}'
+      APP_POSTGRES_PASSWORD: '${APP_POSTGRES_PASSWORD:-password}'
+      APP_POSTGRES_DATABASE: '${APP_POSTGRES_DATABASE:-laba}'
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - './services/postgresql/entrypoint/:/docker-entrypoint-initdb.d'
+      - 'postgres-data:/var/lib/postgresql/data'
+
+  liquibase:
+    build:
+      context: services/liquibase
+      dockerfile: lq.dockerfile
+    depends_on:
+      - postgres
+    restart: 'on-failure'
+    environment:
+      LIQUIBASE_COMMAND_USERNAME: '${APP_POSTGRES_USERNAME:-stud}'
+      LIQUIBASE_COMMAND_PASSWORD: '${APP_POSTGRES_PASSWORD:-password}'
+      LIQUIBASE_COMMAND_URL: 'jdbc:postgresql://postgres:5432/${APP_POSTGRES_DATABASE:-laba}'
+    volumes:
+      - './services/liquibase/changelog:/liquibase/changelog'
+      - './services/liquibase/config:/liquibase/config'
+    command: '--defaults-file=/liquibase/config/liquibase.properties update'
+
+  application:
+    profiles: ["application"]
+    build:
+      context: .
+      dockerfile: backend-from-jar.dockerfile
+    restart: always
+    environment:
+      APP_POSTGRES_HOST: postgres
+
+      APP_POSTGRES_USERNAME: '${APP_POSTGRES_USERNAME:-stud}'
+      APP_POSTGRES_PASSWORD: '${APP_POSTGRES_PASSWORD:-password}'
+      APP_POSTGRES_DATABASE: '${APP_POSTGRES_DATABASE:-laba}'
+      APP_POSTGRES_PORT: 5432
+
+      APP_PORT: 8871
+
+    ports:
+      - "${APP_PORT:-8871}:8871"
+    command: 'java -jar application.jar'
+
+
+volumes:
+  postgres-data:
+
+networks:
+  default:
+    driver: bridge
+
+# docker system prune -af --volumes - удаляет все неиспользуемые образы, контейнеры, сети и тома
